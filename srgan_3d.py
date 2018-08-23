@@ -1,6 +1,3 @@
-"""
-"""
-
 import scipy
 from keras_contrib.layers.normalization import InstanceNormalization
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout, Concatenate
