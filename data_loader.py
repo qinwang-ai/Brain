@@ -16,14 +16,16 @@ class DataLoader(object):
         data = np.copy(img_h)
         x_l, _, _ = self.l_img_res
         x_h, _, _ = self.h_img_res
-        step = x_h//x_l
-        for i in range(0, x_l, step):
-            res.append(data[i])
+       	step = x_h//x_l
+        start = 0
+        for i in range(x_l):
+            start += step
+            res.append(data[start])
         return np.array(res)
         # return zoom(data, (x/x_raw, y/y_raw, z/z_raw))
 
     def load_data(self, dataset_path, batch_size=1):
-        path = glob(dataset_path)
+        path = glob(dataset_path, recursive=True)
         batch_images = np.random.choice(path, size=batch_size)
 
         imgs_hr = []

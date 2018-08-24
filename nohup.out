@@ -36,3 +36,17 @@
 [I 13:10:27.416 NotebookApp] Saving file at /Main.ipynb
 [W 13:10:27.416 NotebookApp] Notebook Main.ipynb is not trusted
 [I 13:11:26.549 NotebookApp] 302 GET / (172.22.174.4) 0.89ms
+[I 13:25:18.230 NotebookApp] Saving file at /Main.ipynb
+[W 13:25:18.231 NotebookApp] Notebook Main.ipynb is not trusted
+[I 13:27:18.717 NotebookApp] Saving file at /Main.ipynb
+[W 13:27:18.717 NotebookApp] Notebook Main.ipynb is not trusted
+[I 13:29:18.243 NotebookApp] Saving file at /Main.ipynb
+[W 13:29:18.244 NotebookApp] Notebook Main.ipynb is not trusted
+[I 13:31:18.187 NotebookApp] Saving file at /Main.ipynb
+[W 13:31:18.188 NotebookApp] Notebook Main.ipynb is not trusted
+[I 13:40:34.769 NotebookApp] Saving file at /Main.ipynb
+[W 13:40:34.770 NotebookApp] Notebook Main.ipynb is not trusted
+[I 13:40:36.136 NotebookApp] Starting buffering for d85e24ba-e7d1-442b-b52f-4e6f4e89e020:bf9d63afb1e044589526e2acb672dcb4
+[W 13:40:36.542 NotebookApp] Notebook Main.ipynb is not trusted
+[I 13:40:37.312 NotebookApp] Adapting to protocol v5.1 for kernel d85e24ba-e7d1-442b-b52f-4e6f4e89e020
+[IPKernelApp] WARNING | Parent appears to have exited, shutting down.
