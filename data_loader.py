@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import nibabel as nib
 from scipy.ndimage import zoom
 min_voxel_value = 0
-max_voxel_value = 1300
+max_voxel_value = 5653.5
 class DataLoader(object):
     def __init__(self, img_h_res, img_l_res):
         self.h_img_res = img_h_res
@@ -22,9 +22,8 @@ class DataLoader(object):
         return np.array(res)
         # return zoom(data, (x/x_raw, y/y_raw, z/z_raw))
 
-    def load_data(self, batch_size=1, is_testing=False):
-        path_st = "./trainset/*" if not is_testing else "./testset/*"
-        path = glob(path_st)
+    def load_data(self, dataset_path, batch_size=1):
+        path = glob(dataset_path)
         batch_images = np.random.choice(path, size=batch_size)
 
         imgs_hr = []

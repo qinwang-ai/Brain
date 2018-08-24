@@ -169,7 +169,7 @@ class SRGAN():
 
         return Model(d0, validity)
 
-    def train(self, epochs, batch_size=1, sample_interval=50):
+    def train(self, trainset_path, epochs, batch_size=1, sample_interval=50):
 
         start_time = datetime.datetime.now()
 
@@ -180,7 +180,7 @@ class SRGAN():
             # ----------------------
 
             # Sample images and their conditioning counterparts
-            imgs_hr, imgs_lr = self.data_loader.load_data(batch_size, is_testing=0)
+            imgs_hr, imgs_lr = self.data_loader.load_data(trainset_path, batch_size)
 
             # From low res. image generate high res. version
             fake_hr = self.generator.predict(imgs_lr)
@@ -198,7 +198,7 @@ class SRGAN():
             # ------------------
 
             # Sample images and their conditioning counterparts
-            imgs_hr, imgs_lr = self.data_loader.load_data(batch_size)
+            imgs_hr, imgs_lr = self.data_loader.load_data(trainset_path, batch_size)
 
             # The generators want the discriminators to label the generated images as real
             valid = np.ones((batch_size,) + self.disc_patch)
@@ -215,13 +215,13 @@ class SRGAN():
 
             # If at save interval => save generated image samples
             if epoch % sample_interval == 0:
-                self.sample_images(epoch)
+                self.sample_images(trainset_path, epoch)
 
-    def sample_images(self, epoch):
+    def sample_images(self, dataset_path, epoch):
         os.makedirs('./sample_images', exist_ok=True)
         r, c = 2, 2
 
-        imgs_hr, imgs_lr = self.data_loader.load_data(batch_size=2, is_testing=True)
+        imgs_hr, imgs_lr = self.data_loader.load_data(dataset_path, batch_size=2, is_testing=True)
         fake_hr = self.generator.predict(imgs_lr)
 
         # Rescale images 0 - 1
@@ -249,6 +249,3 @@ class SRGAN():
             fig.savefig('./sample_images/%d_lowres%d.png' % (epoch, i))
             plt.close()
 
-if __name__ == '__main__':
-    gan = SRGAN()
-    gan.train(epochs=30000, batch_size=1, sample_interval=50)
