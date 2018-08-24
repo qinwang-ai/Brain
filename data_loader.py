@@ -30,25 +30,27 @@ class DataLoader(object):
 
         imgs_hr = []
         imgs_lr = []
+        imgs_info = []
         for img_path in batch_images:
-            h_img = self.imread(img_path)
+            img_info, h_img = self.imread(img_path)
             x_raw, y_raw, z_raw = h_img.shape
             x, y, z = self.h_img_res
             h_img_stand = zoom(h_img, (x/x_raw, y/y_raw, z/z_raw))
             l_img_stand = self.get_res_low_from_origin(h_img_stand)
             imgs_hr.append(h_img_stand)
             imgs_lr.append(l_img_stand)
+            imgs_info.append(img_info)
 
         average = max_voxel_value/2
         imgs_hr = np.array(imgs_hr) / average - 1.
         imgs_lr = np.array(imgs_lr) / average - 1.
-        return imgs_hr, imgs_lr
+        return imgs_hr, imgs_lr, img_info
 
 
     def imread(self, path):
         mri_image = nib.load(path)
         mri_image_data = mri_image.get_fdata()
-        return mri_image_data
+        return mri_image, mri_image_data
 
 def test_preprocessing(X):
     x,y,z,_ = X.shape

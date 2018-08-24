@@ -15,13 +15,11 @@ import os
 
 import keras.backend as K
 
-H_R = (256, 256, 166)
-L_R = (41, 256, 166)
 class SRGAN():
-    def __init__(self):
+    def __init__(self, lr, hr):
         # Input shape
-        self.lr_shape = L_R
-        self.hr_shape = H_R
+        self.lr_shape = lr
+        self.hr_shape = hr
 
         # Number of residual blocks in the generator
         self.n_residual_blocks = 16
@@ -37,7 +35,7 @@ class SRGAN():
             metrics=['accuracy'])
 
         # Configure data loader
-        self.data_loader = DataLoader(img_h_res=H_R, img_l_res=L_R)
+        self.data_loader = DataLoader(img_h_res=self.hr_shape, img_l_res=self.lr_shape)
 
         # Calculate output shape of D (PatchGAN)
         p1, p2, p3 = self.hr_shape[0] // 2**4, self.hr_shape[1] // 2**4, self.hr_shape[2] // 2**4
@@ -179,7 +177,7 @@ class SRGAN():
             # ----------------------
 
             # Sample images and their conditioning counterparts
-            imgs_hr, imgs_lr = self.data_loader.load_data(trainset_path, batch_size)
+            imgs_hr, imgs_lr, imgs_info = self.data_loader.load_data(trainset_path, batch_size)
 
             # From low res. image generate high res. version
             fake_hr = self.generator.predict(imgs_lr)
