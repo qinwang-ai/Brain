@@ -2,7 +2,7 @@ import scipy
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout, Concatenate
 from keras.layers import BatchNormalization, Activation, ZeroPadding2D, Add
 from keras.layers.advanced_activations import PReLU, LeakyReLU
-from keras.layers.convolutional import UpSampling2D, Conv2D
+from keras.layers.convolutional import UpSampling2D, Conv2D, Conv3D, UpSampling3D
 from keras.applications import VGG19
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
@@ -55,14 +55,14 @@ class SRGAN():
         self.generator = self.build_generator()
 
         # High res. and low res. images
-        img_hr = Input(shape=self.hr_shape)
         img_lr = Input(shape=self.lr_shape)
+        img_hr = Input(shape=self.hr_shape)
 
         # Generate high res. version from low res.
         fake_hr = self.generator(img_lr)
 
         # Extract image features of the generated img
-        fake_features = self.vgg(fake_hr)
+        fake_features = self.vgg(fake_hr[:,128,:])
 
         # For the combined model we will only train the generator
         self.discriminator.trainable = False
@@ -97,18 +97,18 @@ class SRGAN():
 
         def residual_block(layer_input):
             """Residual block described in paper"""
-            d = Conv2D(64, kernel_size=3, strides=1, padding='same')(layer_input)
+            d = Conv3D(64, kernel_size=3, strides=1, padding='same')(layer_input)
             d = Activation('relu')(d)
             d = BatchNormalization(momentum=0.8)(d)
-            d = Conv2D(64, kernel_size=3, strides=1, padding='same')(d)
+            d = Conv3D(64, kernel_size=3, strides=1, padding='same')(d)
             d = BatchNormalization(momentum=0.8)(d)
             d = Add()([d, layer_input])
             return d
 
         def deconv2d(layer_input):
             """Layers used during upsampling"""
-            u = UpSampling2D(size=2)(layer_input)
-            u = Conv2D(256, kernel_size=3, strides=1, padding='same')(u)
+            u = UpSampling3D(size=2)(layer_input)
+            u = Conv3D(256, kernel_size=3, strides=1, padding='same')(u)
             u = Activation('relu')(u)
             return u
 
@@ -116,7 +116,7 @@ class SRGAN():
         img_lr = Input(shape=self.lr_shape)
 
         # Pre-residual block
-        c1 = Conv2D(64, kernel_size=9, strides=1, padding='same')(img_lr)
+        c1 = Conv3D(64, kernel_size=9, strides=1, padding='same')(img_lr)
         c1 = Activation('relu')(c1)
 
         # Propogate through residual blocks
@@ -125,7 +125,7 @@ class SRGAN():
             r = residual_block(r)
 
         # Post-residual block
-        c2 = Conv2D(64, kernel_size=3, strides=1, padding='same')(r)
+        c2 = Conv3D(64, kernel_size=3, strides=1, padding='same')(r)
         c2 = BatchNormalization(momentum=0.8)(c2)
         c2 = Add()([c2, c1])
 
@@ -134,7 +134,7 @@ class SRGAN():
         u2 = deconv2d(u1)
 
         # Generate high resolution output
-        gen_hr = Conv2D(self.channels, kernel_size=9, strides=1, padding='same', activation='tanh')(u2)
+        gen_hr = Conv3D(self.channels, kernel_size=9, strides=1, padding='same', activation='tanh')(u2)
 
         return Model(img_lr, gen_hr)
 
@@ -142,7 +142,7 @@ class SRGAN():
 
         def d_block(layer_input, filters, strides=1, bn=True):
             """Discriminator layer"""
-            d = Conv2D(filters, kernel_size=3, strides=strides, padding='same')(layer_input)
+            d = Conv3D(filters, kernel_size=3, strides=strides, padding='same')(layer_input)
             d = LeakyReLU(alpha=0.2)(d)
             if bn:
                 d = BatchNormalization(momentum=0.8)(d)
@@ -201,7 +201,7 @@ class SRGAN():
             valid = np.ones((batch_size,) + self.disc_patch)
 
             # Extract ground truth image features using pre-trained VGG19 model
-            image_features = self.vgg.predict(imgs_hr)
+            image_features = self.vgg.predict(imgs_hr[:,128,:])
 
             # Train the generators
             g_loss = self.combined.train_on_batch([imgs_lr, imgs_hr], [valid, image_features])
