@@ -5,10 +5,10 @@ def imread(path):
     return mri_image_data
 Min = 9999
 Max = -1000
-def summary():
+def summary(trainset_path):
     global Min, Max
     # summary all the trainset to find minimum and maximum voxel value, consume several minutes
-    path_st = "./trainset/*"
+    path_st = trainset_path
     paths = glob(path_st)
     if Min != 9999:
         return Min, Max
