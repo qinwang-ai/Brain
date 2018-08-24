@@ -24,7 +24,14 @@ class DataLoader(object):
         return np.array(res)
         # return zoom(data, (x/x_raw, y/y_raw, z/z_raw))
 
-    def load_data(self, dataset_path, batch_size=1):
+    def get_low_res_file_with_affine(self, data, info, shape):
+        affine = np.eye(4)
+        affine[0, 0] = shape[0] / data.shape[0]
+        test_img = nib.Nifti1Image(data, affine, info.header)
+        test_img.update_header()
+        return test_img
+
+    def load_data(self, dataset_path, batch_size=1, is_testing=False):
         path = glob(dataset_path, recursive=True)
         batch_images = np.random.choice(path, size=batch_size)
 
@@ -35,10 +42,16 @@ class DataLoader(object):
         imgs_shape = []
         for img_path in batch_images:
             img_info, h_img = self.imread(img_path)
+            if is_testing:
+                h_img = test_preprocessing(h_img)
             x_raw, y_raw, z_raw = h_img.shape
             x, y, z = self.h_img_res
-            h_img_stand = zoom(h_img, (x/x_raw, y/y_raw, z/z_raw))
-            l_img_stand = self.get_res_low_from_origin(h_img_stand)
+            if is_testing:
+                h_img_stand = h_img
+                l_img_stand = h_img
+            else:
+                h_img_stand = zoom(h_img, (x/x_raw, y/y_raw, z/z_raw))
+                l_img_stand = self.get_res_low_from_origin(h_img_stand)
             imgs_hr.append(h_img_stand)
             imgs_lr.append(l_img_stand)
             imgs_info.append(img_info)
