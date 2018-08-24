@@ -31,6 +31,8 @@ class DataLoader(object):
         imgs_hr = []
         imgs_lr = []
         imgs_info = []
+        imgs_path = []
+        imgs_shape = []
         for img_path in batch_images:
             img_info, h_img = self.imread(img_path)
             x_raw, y_raw, z_raw = h_img.shape
@@ -40,11 +42,13 @@ class DataLoader(object):
             imgs_hr.append(h_img_stand)
             imgs_lr.append(l_img_stand)
             imgs_info.append(img_info)
+            imgs_shape.append(h_img.shape)
+            imgs_path.append(img_path)
 
         average = max_voxel_value/2
         imgs_hr = np.array(imgs_hr) / average - 1.
         imgs_lr = np.array(imgs_lr) / average - 1.
-        return imgs_hr, imgs_lr, img_info
+        return imgs_hr, imgs_lr, imgs_info, imgs_shape, imgs_path
 
 
     def imread(self, path):
