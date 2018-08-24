@@ -1,0 +1,38 @@
+[W 11:46:43.681 NotebookApp] WARNING: The notebook server is listening on all IP addresses and not using encryption. This is not recommended.
+[I 11:46:43.681 NotebookApp] The port 2031 is already in use, trying another port.
+[I 11:46:43.686 NotebookApp] Serving notebooks from local directory: /home/cse/Desktop/Completion
+[I 11:46:43.686 NotebookApp] The Jupyter Notebook is running at:
+[I 11:46:43.686 NotebookApp] http://(cse-server1 or 127.0.0.1):2032/
+[I 11:46:43.686 NotebookApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
+[W 12:02:35.670 NotebookApp] WARNING: The notebook server is listening on all IP addresses and not using encryption. This is not recommended.
+[I 12:02:35.674 NotebookApp] Serving notebooks from local directory: /home/cse/Desktop/Completion
+[I 12:02:35.674 NotebookApp] The Jupyter Notebook is running at:
+[I 12:02:35.674 NotebookApp] http://(cse-server1 or 127.0.0.1):2031/
+[I 12:02:35.674 NotebookApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
+[W 12:02:37.974 NotebookApp] 404 GET /api/kernels/59953d33-15c2-482a-b969-ce51356ce06e/channels?session_id=5b74cb04792b49758a49078449266a61 (172.22.174.4): Kernel does not exist: 59953d33-15c2-482a-b969-ce51356ce06e
+[W 12:02:37.998 NotebookApp] 404 GET /api/kernels/59953d33-15c2-482a-b969-ce51356ce06e/channels?session_id=5b74cb04792b49758a49078449266a61 (172.22.174.4) 33.54ms referer=None
+[W 12:02:41.427 NotebookApp] Notebook Main.ipynb is not trusted
+[I 12:02:42.097 NotebookApp] Kernel started: d85e24ba-e7d1-442b-b52f-4e6f4e89e020
+[I 12:02:42.601 NotebookApp] Adapting to protocol v5.1 for kernel d85e24ba-e7d1-442b-b52f-4e6f4e89e020
+[I 12:04:37.148 NotebookApp] Kernel interrupted: d85e24ba-e7d1-442b-b52f-4e6f4e89e020
+[I 12:04:37.406 NotebookApp] Kernel interrupted: d85e24ba-e7d1-442b-b52f-4e6f4e89e020
+[I 12:04:42.586 NotebookApp] Saving file at /Main.ipynb
+[W 12:04:42.587 NotebookApp] Notebook Main.ipynb is not trusted
+[I 12:06:43.282 NotebookApp] Saving file at /Main.ipynb
+[W 12:06:43.283 NotebookApp] Notebook Main.ipynb is not trusted
+[I 12:08:43.297 NotebookApp] Saving file at /Main.ipynb
+[W 12:08:43.298 NotebookApp] Notebook Main.ipynb is not trusted
+[I 12:10:43.294 NotebookApp] Saving file at /Main.ipynb
+[W 12:10:43.295 NotebookApp] Notebook Main.ipynb is not trusted
+[I 12:12:43.295 NotebookApp] Saving file at /Main.ipynb
+[W 12:12:43.295 NotebookApp] Notebook Main.ipynb is not trusted
+[I 12:14:43.310 NotebookApp] Saving file at /Main.ipynb
+[W 12:14:43.311 NotebookApp] Notebook Main.ipynb is not trusted
+[I 12:19:03.048 NotebookApp] Saving file at /Main.ipynb
+[W 12:19:03.049 NotebookApp] Notebook Main.ipynb is not trusted
+[I 13:06:16.105 NotebookApp] Starting buffering for d85e24ba-e7d1-442b-b52f-4e6f4e89e020:bf9d63afb1e044589526e2acb672dcb4
+[I 13:07:30.588 NotebookApp] Adapting to protocol v5.1 for kernel d85e24ba-e7d1-442b-b52f-4e6f4e89e020
+[I 13:07:30.590 NotebookApp] Restoring connection for d85e24ba-e7d1-442b-b52f-4e6f4e89e020:bf9d63afb1e044589526e2acb672dcb4
+[I 13:10:27.416 NotebookApp] Saving file at /Main.ipynb
+[W 13:10:27.416 NotebookApp] Notebook Main.ipynb is not trusted
+[I 13:11:26.549 NotebookApp] 302 GET / (172.22.174.4) 0.89ms
