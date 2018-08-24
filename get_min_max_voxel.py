@@ -9,7 +9,7 @@ def summary(trainset_path):
     global Min, Max
     # summary all the trainset to find minimum and maximum voxel value, consume several minutes
     path_st = trainset_path
-    paths = glob(path_st)
+    paths = glob(trainset_path, recursive=True)
     if Min != 9999:
         return Min, Max
     for p in paths:
