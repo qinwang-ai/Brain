@@ -143,14 +143,11 @@ class SRGAN():
 
     def train(self, trainset_path, epochs, batch_size=1, sample_interval=200):
 
-        start_time = datetime.datetime.now()
-
         for epoch in range(epochs):
-
+            start_time = datetime.datetime.now()
             # ----------------------
             #  Train Discriminator
             # ----------------------
-
             # Sample images and their conditioning counterparts
             imgs_hr, imgs_lr, imgs_info, imgs_shape, imgs_path = self.data_loader.load_data(trainset_path, batch_size)
 
