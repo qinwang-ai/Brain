@@ -14,49 +14,48 @@ class DataLoader(object):
     def get_res_low_from_origin(self, img_h):
         res = []
         data = np.copy(img_h)
-        x_l, _, _ = self.l_img_res
-        x_h, _, _ = self.h_img_res
+        x_l = self.l_img_res[0]
+        x_h = self.h_img_res[0]
        	step = x_h//x_l
         start = 0
         for i in range(x_l):
+            if start < data.shape[0]:
+                res.append(data[start])
             start += step
-            res.append(data[start])
-        return np.array(res)
-        # return zoom(data, (x/x_raw, y/y_raw, z/z_raw))
+        res = np.array(res)
+        return res
 
-    def get_low_res_file_with_affine(self, data, info, shape):
-        affine = np.eye(4)
-        affine[0, 0] = shape[0] / data.shape[0]
-        test_img = nib.Nifti1Image(data, affine, info.header)
-        test_img.update_header()
-        return test_img
+    # return zoom(data, (x/x_raw, y/y_raw, z/z_raw))
 
     def load_data(self, dataset_path, batch_size=1, is_testing=False):
-        path = glob(dataset_path, recursive=True)
-        batch_images = np.random.choice(path, size=batch_size)
+        paths = glob(dataset_path, recursive=True)
+        batch_images = np.random.choice(paths, size=batch_size)
 
         imgs_hr = []
         imgs_lr = []
         imgs_info = []
         imgs_path = []
         imgs_shape = []
-        for img_path in batch_images:
-            img_info, h_img = self.imread(img_path)
+        for path in batch_images:
+            info, h_img = self.imread(path)
             if is_testing:
                 h_img = test_preprocessing(h_img)
-            x_raw, y_raw, z_raw = h_img.shape
-            x, y, z = self.h_img_res
+
             if is_testing:
                 h_img_stand = h_img
                 l_img_stand = h_img
             else:
+                x_raw, y_raw, z_raw = h_img.shape
+                x, y, z,_ = self.h_img_res
                 h_img_stand = zoom(h_img, (x/x_raw, y/y_raw, z/z_raw))
                 l_img_stand = self.get_res_low_from_origin(h_img_stand)
+            h_img_stand = np.expand_dims(h_img_stand, axis=-1)
+            l_img_stand = np.expand_dims(l_img_stand, axis=-1)
             imgs_hr.append(h_img_stand)
             imgs_lr.append(l_img_stand)
-            imgs_info.append(img_info)
+            imgs_info.append(info)
             imgs_shape.append(h_img.shape)
-            imgs_path.append(img_path)
+            imgs_path.append(path)
 
         average = max_voxel_value/2
         imgs_hr = np.array(imgs_hr) / average - 1.
@@ -76,8 +75,10 @@ def test_preprocessing(X):
     X = np.rot90(X, 2, axes=(1,2))
     return X
 
-def show_slices(slices):
+def show_slices(slices, title=''):
     fig,axes = plt.subplots(len(slices), 1, figsize=(16, 16))
     for i,slice in enumerate(slices):
         axes[i].imshow(slice.T, cmap="gray", origin="lower")
+        axes[i].set_title(title)
+    return fig
 

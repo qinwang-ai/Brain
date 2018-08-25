@@ -3,8 +3,8 @@ from keras.layers import Input, Dense, Reshape, Flatten, Dropout, Concatenate
 from keras.layers import BatchNormalization, Activation, ZeroPadding2D, Add
 from keras.layers.advanced_activations import PReLU, LeakyReLU
 from keras.layers.convolutional import UpSampling2D, Conv2D, Conv3D, UpSampling3D
+from keras.applications import VGG19
 from keras.models import Sequential, Model
-from keras.utils import multi_gpu_model
 from keras.optimizers import Adam
 import datetime
 import matplotlib.pyplot as plt
@@ -12,36 +12,41 @@ import sys
 from data_loader import DataLoader
 import numpy as np
 import os
-import nibabel as nib
 
 import keras.backend as K
 
 class SRGAN():
-    def __init__(self, lr, hr, n_residual_blocks=8, gpus=1):
+    def __init__(self, lr, hr):
         # Input shape
         self.lr_shape = lr
         self.hr_shape = hr
-        self.channels = 1
 
         # Number of residual blocks in the generator
-        self.n_residual_blocks = n_residual_blocks
+        self.n_residual_blocks = 16
 
         optimizer = Adam(0.0002, 0.5)
+
+        # We use a pre-trained VGG19 model to extract image features from the high resolution
+        # and the generated high resolution images and minimize the mse between them
+        self.vgg = self.build_vgg()
+        self.vgg.trainable = False
+        self.vgg.compile(loss='mse',
+            optimizer=optimizer,
+            metrics=['accuracy'])
 
         # Configure data loader
         self.data_loader = DataLoader(img_h_res=self.hr_shape, img_l_res=self.lr_shape)
 
         # Calculate output shape of D (PatchGAN)
-        self.disc_patch = (hr[0] // 2**3, hr[1] // 2**3, hr[2] // 2**3, 1)
+        p1, p2, p3 = self.hr_shape[0] // 2**4, self.hr_shape[1] // 2**4, self.hr_shape[2] // 2**4
+        self.disc_patch = (p1, p2, p3)
 
-        # Number of filters in the first layer of D
-        self.df = 16
+        # Number of filters in the first layer of G and D
+        self.gf = 64
+        self.df = 64
 
         # Build and compile the discriminator
         self.discriminator = self.build_discriminator()
-        if gpus != 1:
-            self.discriminator = multi_gpu_model(self.discriminator, gpus=gpus)
-
         self.discriminator.compile(loss='mse',
             optimizer=optimizer,
             metrics=['accuracy'])
@@ -49,11 +54,15 @@ class SRGAN():
         # Build the generator
         self.generator = self.build_generator()
 
-        # Low res. images
+        # High res. and low res. images
         img_lr = Input(shape=self.lr_shape)
+        img_hr = Input(shape=self.hr_shape)
 
         # Generate high res. version from low res.
         fake_hr = self.generator(img_lr)
+
+        # Extract image features of the generated img
+        fake_features = self.vgg(fake_hr[:,128,:])
 
         # For the combined model we will only train the generator
         self.discriminator.trainable = False
@@ -61,29 +70,45 @@ class SRGAN():
         # Discriminator determines validity of generated high res. images
         validity = self.discriminator(fake_hr)
 
-        self.combined = Model(img_lr, validity)
-        if gpus != 1:
-            self.combined = multi_gpu_model(self.combined, gpus=gpus)
-        self.combined.compile(loss=['binary_crossentropy'],
-                              loss_weights=[1],
+        self.combined = Model([img_lr, img_hr], [validity, fake_features])
+        self.combined.compile(loss=['binary_crossentropy', 'mse'],
+                              loss_weights=[1e-3, 1],
                               optimizer=optimizer)
+
+
+    def build_vgg(self):
+        """
+        Builds a pre-trained VGG19 model that outputs image features extracted at the
+        third block of the model
+        """
+        vgg = VGG19(weights="imagenet")
+        # Set outputs to outputs of last conv. layer in block 3
+        # See architecture at: https://github.com/keras-team/keras/blob/master/keras/applications/vgg19.py
+        vgg.outputs = [vgg.layers[9].output]
+
+        img = Input(shape=self.hr_shape)
+
+        # Extract image features
+        img_features = vgg(img)
+
+        return Model(img, img_features)
 
     def build_generator(self):
 
-        def residual_block(layer_input, filters=32):
+        def residual_block(layer_input):
             """Residual block described in paper"""
-            d = Conv3D(filters, kernel_size=3, strides=1, padding='same')(layer_input)
+            d = Conv3D(64, kernel_size=3, strides=1, padding='same')(layer_input)
             d = Activation('relu')(d)
             d = BatchNormalization(momentum=0.8)(d)
-            d = Conv3D(filters, kernel_size=3, strides=1, padding='same')(d)
+            d = Conv3D(64, kernel_size=3, strides=1, padding='same')(d)
             d = BatchNormalization(momentum=0.8)(d)
             d = Add()([d, layer_input])
             return d
 
-        def deconv3d(layer_input, filters=32):
+        def deconv2d(layer_input):
             """Layers used during upsampling"""
-            u = UpSampling3D(size=(2, 1, 1))(layer_input)
-            u = Conv3D(filters, kernel_size=3, strides=1, padding='same')(u)
+            u = UpSampling3D(size=2)(layer_input)
+            u = Conv3D(256, kernel_size=3, strides=1, padding='same')(u)
             u = Activation('relu')(u)
             return u
 
@@ -91,22 +116,22 @@ class SRGAN():
         img_lr = Input(shape=self.lr_shape)
 
         # Pre-residual block
-        c1 = Conv3D(32, kernel_size=9, strides=1, padding='same')(img_lr)
+        c1 = Conv3D(64, kernel_size=9, strides=1, padding='same')(img_lr)
         c1 = Activation('relu')(c1)
 
         # Propogate through residual blocks
         r = residual_block(c1)
         for _ in range(self.n_residual_blocks - 1):
-            r = residual_block(r, filters=32)
+            r = residual_block(r)
 
         # Post-residual block
-        c2 = Conv3D(32, kernel_size=3, strides=1, padding='same')(r)
+        c2 = Conv3D(64, kernel_size=3, strides=1, padding='same')(r)
         c2 = BatchNormalization(momentum=0.8)(c2)
         c2 = Add()([c2, c1])
 
         # Upsampling
-        u1 = deconv3d(c2, filters=32)
-        u2 = deconv3d(u1, filters=32)
+        u1 = deconv2d(c2)
+        u2 = deconv2d(u1)
 
         # Generate high resolution output
         gen_hr = Conv3D(self.channels, kernel_size=9, strides=1, padding='same', activation='tanh')(u2)
@@ -132,16 +157,16 @@ class SRGAN():
         d4 = d_block(d3, self.df*2, strides=2)
         d5 = d_block(d4, self.df*4)
         d6 = d_block(d5, self.df*4, strides=2)
-        #d7 = d_block(d6, self.df*8)
-        #d8 = d_block(d7, self.df*8, strides=2)
+        d7 = d_block(d6, self.df*8)
+        d8 = d_block(d7, self.df*8, strides=2)
 
-        d9 = Dense(self.df*8)(d6)
+        d9 = Dense(self.df*16)(d8)
         d10 = LeakyReLU(alpha=0.2)(d9)
         validity = Dense(1, activation='sigmoid')(d10)
 
         return Model(d0, validity)
 
-    def train(self, trainset_path, epochs, batch_size=1, sample_interval=200):
+    def train(self, trainset_path, epochs, batch_size=1, sample_interval=50):
 
         start_time = datetime.datetime.now()
 
@@ -175,79 +200,51 @@ class SRGAN():
             # The generators want the discriminators to label the generated images as real
             valid = np.ones((batch_size,) + self.disc_patch)
 
+            # Extract ground truth image features using pre-trained VGG19 model
+            image_features = self.vgg.predict(imgs_hr[:,128,:])
+
             # Train the generators
-            g_loss = self.combined.train_on_batch(imgs_lr, valid)
+            g_loss = self.combined.train_on_batch([imgs_lr, imgs_hr], [valid, image_features])
 
             elapsed_time = datetime.datetime.now() - start_time
             # Plot the progress
-            print ("%d time:%s d_loss:%f d_acc:%f g_loss:%f" % (epoch, elapsed_time, d_loss[0], d_loss[1], g_loss))
+            print ("%d time: %s" % (epoch, elapsed_time))
 
             # If at save interval => save generated image samples
-            if epoch % sample_interval == 0 and epoch != 0:
+            if epoch % sample_interval == 0:
                 self.sample_images(trainset_path, epoch)
 
     def sample_images(self, dataset_path, epoch):
         os.makedirs('./sample_images', exist_ok=True)
+        r, c = 2, 2
 
-        imgs_hr, imgs_lr, imgs_info, imgs_shape, imgs_path = self.data_loader.load_data(dataset_path, batch_size=1, is_testing=False)
-        fakes_hr = self.generator.predict(imgs_lr)
+        imgs_hr, imgs_lr, imgs_info, imgs_shape, imgs_path = self.data_loader.load_data(dataset_path, batch_size=2, is_testing=True)
+        fake_hr = self.generator.predict(imgs_lr)
 
         # Rescale images 0 - 1
-        # TODO change
         imgs_lr = 0.5 * imgs_lr + 0.5
-        fakes_hr = 0.5 * fakes_hr + 0.5
-
-        img_lr = imgs_lr[0]
-        img_hr = imgs_hr[0]
-        fake_hr = fakes_hr[0]
-        img_path = imgs_path[0]
-        img_info = imgs_info[0]
-        img_shape = imgs_shape[0]
-        name = get_name_by_path(img_path)
-
-        # Save low resolution images for comparison
-        fig = self.show_img(img_lr, "low_rs")
-        fig.savefig("./sample_images/low_rs_%s_epoch_%d.png" % (name, epoch))
-        plt.close()
-        save_nii_to_file("low_res_%s_epoch_%d.nii" % (name, epoch), img_lr, img_info, img_shape, is_low=True)
+        fake_hr = 0.5 * fake_hr + 0.5
+        imgs_hr = 0.5 * imgs_hr + 0.5
 
         # Save generated images and the high resolution originals
-        fig = self.show_img(fake_hr, "generated_hs")
-        fig.savefig("./sample_images/generated_hs_%s_epoch_%d.png" % (name, epoch))
+        titles = ['Generated', 'Original']
+        fig, axs = plt.subplots(r, c)
+        cnt = 0
+        for row in range(r):
+            for col, image in enumerate([fake_hr, imgs_hr]):
+                axs[row, col].imshow(image[row])
+                axs[row, col].set_title(titles[col])
+                axs[row, col].axis('off')
+            cnt += 1
+        fig.savefig("./sample_images/%d.png" % epoch)
         plt.close()
-        save_nii_to_file("generated_res_%s_epoch_%d.nii" % (name, epoch), fake_hr, img_info, img_shape)
 
-        # Save ground truth
-        fig = self.show_img(img_hr, "ground truth")
-        fig.savefig("./sample_images/ground_truth_%s_epoch_%d.png" % (get_name_by_path(img_path), epoch))
-        plt.close()
-
-
-    def show_img(self, epi_img_data_stand, title=''):
-        if (len(epi_img_data_stand.shape) == 5):
-            epi_img_data_stand = epi_img_data_stand[0]
-        x, y, z,_ = epi_img_data_stand.shape
-        epi_img_data_stand = np.reshape(epi_img_data_stand,(x,y,z))
-        slice0 = epi_img_data_stand[x//2,:,:]
-        slice1 = epi_img_data_stand[:,y//2,:]
-        slice2 = epi_img_data_stand[:,:,z//2]
-        return data_loader.show_slices([slice0, slice1, slice2], title)
+        # Save low resolution images for comparison
+        for i in range(r):
+            fig = plt.figure()
+            plt.imshow(imgs_lr[i])
+            fig.savefig('./sample_images/%d_lowres%d.png' % (epoch, i))
+            plt.close()
 
 def get_name_by_path(path):
     return path.split('/')[-1]
-
-def save_nii_to_file(name, data, info, shape, is_low=False):
-    if is_low:
-        img = get_low_res_file_with_affine(data, info, shape)
-    else:
-        img = nib.Nifti1Image(data, info.affine, info.header)
-        img.update_header()
-    nib.save(img, "sample_niis/"+name)
-
-def get_low_res_file_with_affine(data, info, shape):
-    affine = np.eye(4)
-    affine[0, 0] = shape[0] / data.shape[0]
-    test_img = nib.Nifti1Image(data, affine, info.header)
-    test_img.update_header()
-    return test_img
-
