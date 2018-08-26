@@ -57,11 +57,18 @@ class DataLoader(object):
             imgs_shape.append(h_img.shape)
             imgs_path.append(path)
 
-        average = max_voxel_value/2
-        imgs_hr = np.array(imgs_hr) / average - 1.
-        imgs_lr = np.array(imgs_lr) / average - 1.
+        # normalize to 0~1
+        imgs_hr = self.normalize(imgs_hr)
+        imgs_lr = self.normalize(imgs_lr)
         return imgs_hr, imgs_lr, imgs_info, imgs_shape, imgs_path
 
+    def normalize(self, img):
+        average = max_voxel_value/2.0
+        return np.array(img) / float(average) - 1.
+
+    def unnormalize(self, img):
+        average = max_voxel_value/2.0
+        return (img + 1) * average
 
     def imread(self, path):
         mri_image = nib.load(path)

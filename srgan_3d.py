@@ -189,11 +189,6 @@ class SRGAN():
         imgs_hr, imgs_lr, imgs_info, imgs_shape, imgs_path = self.data_loader.load_data(dataset_path, batch_size=1, is_testing=False)
         fakes_hr = self.generator.predict(imgs_lr)
 
-        # Rescale images 0 - 1
-        # TODO change
-        imgs_lr = 0.5 * imgs_lr + 0.5
-        fakes_hr = 0.5 * fakes_hr + 0.5
-
         img_lr = imgs_lr[0]
         img_hr = imgs_hr[0]
         fake_hr = fakes_hr[0]
@@ -201,6 +196,10 @@ class SRGAN():
         img_info = imgs_info[0]
         img_shape = imgs_shape[0]
         name = get_name_by_path(img_path)
+
+        img_lr = self.data_loader.unnormalize(img_lr)
+        img_hr = self.data_loader.unnormalize(img_hr)
+        fake_hr = self.data_loader.unnormalize(fake_hr)
 
         # Save low resolution images for comparison
         fig = self.show_img(img_lr, "low_rs")
