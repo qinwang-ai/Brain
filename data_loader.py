@@ -10,6 +10,7 @@ class DataLoader(object):
     def __init__(self, img_h_res, img_l_res):
         self.h_img_res = img_h_res
         self.l_img_res = img_l_res
+        self.resource_pool = {}
 
     def get_res_low_from_origin(self, img_h):
         res = []
@@ -24,20 +25,30 @@ class DataLoader(object):
             start += step
         res = np.array(res)
         return res
-
     # return zoom(data, (x/x_raw, y/y_raw, z/z_raw))
+
+    def get_file_count(self, dataset_path):
+        paths = glob(dataset_path, recursive=True)
+        return len(paths)
 
     def load_data(self, dataset_path, batch_size=1, is_testing=False):
         paths = glob(dataset_path, recursive=True)
         batch_images = np.random.choice(paths, size=batch_size)
-
         imgs_hr = []
         imgs_lr = []
         imgs_info = []
         imgs_path = []
         imgs_shape = []
         for path in batch_images:
-            info, h_img = self.imread(path)
+            if path not in self.resource_pool:
+                info, h_img = self.imread(path)
+                # prevent run out of memory
+                if (len(self.resource_pool) < 1000):
+                    self.resource_pool[path] = (info, np.copy(h_img))
+            else:
+                info, h_img = self.resource_pool[path]
+                h_img = np.copy(h_img)
+
             if is_testing:
                 h_img = test_preprocessing(h_img)
 
@@ -66,8 +77,10 @@ class DataLoader(object):
         average = max_voxel_value/2.0
         return np.array(img) / float(average) - 1.
 
-    def unnormalize(self, img):
-        average = max_voxel_value/2.0
+    def unnormalize(self, img, max_value=None):
+        if max_value is None:
+            max_value = max_voxel_value
+        average = max_value/2.0
         return (img + 1) * average
 
     def imread(self, path):
@@ -83,9 +96,14 @@ def test_preprocessing(X):
     return X
 
 def show_slices(slices, title=''):
-    fig,axes = plt.subplots(len(slices), 1, figsize=(16, 16))
+    fig, axes = plt.subplots(len(slices), 1, figsize=(16, 16))
     for i,slice in enumerate(slices):
         axes[i].imshow(slice.T, cmap="gray", origin="lower")
         axes[i].set_title(title)
     return fig
+
+def clear_samples():
+    import os
+    os.system("rm sample_niis/*")
+    os.system("rm sample_images/*")
 

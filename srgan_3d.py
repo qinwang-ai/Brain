@@ -7,8 +7,10 @@ from keras.models import Sequential, Model
 from keras.utils import multi_gpu_model
 from keras.optimizers import Adam
 import datetime
+from IPython.display import clear_output
 import matplotlib.pyplot as plt
 import sys
+import data_loader
 from data_loader import DataLoader
 import numpy as np
 import os
@@ -141,9 +143,9 @@ class SRGAN():
 
         return Model(d0, validity)
 
-    def train(self, trainset_path, epochs, batch_size=1, sample_interval=200):
+    def train(self, trainset_path, iterations, batch_size=1, sample_interval=500):
 
-        for epoch in range(epochs):
+        for iteration in range(iterations):
             start_time = datetime.datetime.now()
             # ----------------------
             #  Train Discriminator
@@ -177,13 +179,19 @@ class SRGAN():
 
             elapsed_time = datetime.datetime.now() - start_time
             # Plot the progress
-            print ("%d time:%s d_loss:%f d_acc:%f g_loss:%f" % (epoch, elapsed_time, d_loss[0], d_loss[1], g_loss))
+            clear_output()
+            print ("%d time:%s d_loss:%f d_acc:%f g_loss:%f" % (iteration, elapsed_time, d_loss[0], d_loss[1], g_loss))
 
             # If at save interval => save generated image samples
-            if epoch % sample_interval == 0 and epoch != 0:
-                self.sample_images(trainset_path, epoch)
+            if iteration % sample_interval == 0 and iteration != 0:
+                self.sample_images(trainset_path, iteration)
 
-    def sample_images(self, dataset_path, epoch):
+            # Show on notebook
+            fake_hr = self.data_loader.unnormalize(fake_hr, max_value=1024)
+            self.show_img(fake_hr, notebook=True)
+
+
+    def sample_images(self, dataset_path, iteration):
         os.makedirs('./sample_images', exist_ok=True)
 
         imgs_hr, imgs_lr, imgs_info, imgs_shape, imgs_path = self.data_loader.load_data(dataset_path, batch_size=1, is_testing=False)
@@ -203,23 +211,23 @@ class SRGAN():
 
         # Save low resolution images for comparison
         fig = self.show_img(img_lr, "low_rs")
-        fig.savefig("./sample_images/low_rs_%s_epoch_%d.png" % (name, epoch))
+        fig.savefig("./sample_images/LOW_RS_ITERATION_%d_%s.png" % (iteration, name))
         plt.close()
-        save_nii_to_file("low_res_%s_epoch_%d.nii" % (name, epoch), img_lr, img_info, img_shape, is_low=True)
+        save_nii_to_file("LOW_RES_ITERATION_%d_%s.nii" % (iteration, name), img_lr, img_info, img_shape, is_low=True)
 
         # Save generated images and the high resolution originals
         fig = self.show_img(fake_hr, "generated_hs")
-        fig.savefig("./sample_images/generated_hs_%s_epoch_%d.png" % (name, epoch))
+        fig.savefig("./sample_images/GENERATE_HS_ITERATION_%d_%s.png" % (iteration, name))
         plt.close()
-        save_nii_to_file("generated_res_%s_epoch_%d.nii" % (name, epoch), fake_hr, img_info, img_shape)
+        save_nii_to_file("GENERATE_RES_ITERATION_%d_%s.nii" % (iteration, name), fake_hr, img_info, img_shape)
 
         # Save ground truth
         fig = self.show_img(img_hr, "ground truth")
-        fig.savefig("./sample_images/ground_truth_%s_epoch_%d.png" % (get_name_by_path(img_path), epoch))
+        fig.savefig("./sample_images/GROUND_TRUTH_ITERATION_%d_%s.png" % (iteration, get_name_by_path(img_path)))
         plt.close()
 
 
-    def show_img(self, epi_img_data_stand, title=''):
+    def show_img(self, epi_img_data_stand, title='', notebook=False):
         if (len(epi_img_data_stand.shape) == 5):
             epi_img_data_stand = epi_img_data_stand[0]
         x, y, z,_ = epi_img_data_stand.shape
@@ -227,10 +235,25 @@ class SRGAN():
         slice0 = epi_img_data_stand[x//2,:,:]
         slice1 = epi_img_data_stand[:,y//2,:]
         slice2 = epi_img_data_stand[:,:,z//2]
+        if notebook:
+            show_on_notebook(slice0, slice1, slice2)
+            return None
         return data_loader.show_slices([slice0, slice1, slice2], title)
 
+    def free_memory(self):
+        self.resource_pool.clear()
+
+    def load_model(self):
+        self.generator.load_weights("models/generator_weights.h5")
+        self.discriminator.load_weights("models/discriminator_weights.h5")
+
+    def save_model(self):
+        self.generator.save_weights("models/generator_weights.h5")
+        self.discriminator.save_weights("models/discriminator_weights.h5")
+
 def get_name_by_path(path):
-    return path.split('/')[-1]
+    filename = path.split('/')[-1]
+    return filename.split('.')[0]
 
 def save_nii_to_file(name, data, info, shape, is_low=False):
     if is_low:
@@ -246,4 +269,20 @@ def get_low_res_file_with_affine(data, info, shape):
     test_img = nib.Nifti1Image(data, affine, info.header)
     test_img.update_header()
     return test_img
+
+def show_on_notebook(img0, img1, img2):
+    from IPython.display import display
+    from PIL import Image
+    offset = img2.shape[1] - img1.shape[1]
+    img0 = np.pad(img0, ((0,0), (20,20+offset)), 'constant', constant_values=1000)
+    img1 = np.pad(img1, ((0,0), (20,20+offset)), 'constant', constant_values=1000)
+    img2 = np.pad(img2, ((0,0), (20,20)), 'constant', constant_values=1000)
+    img = np.concatenate((img0, img1, img2), axis=1)
+    img = Image.fromarray(img)
+    img = img.convert('RGB')
+    display(img)
+
+
+
+
 
