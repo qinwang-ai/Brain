@@ -53,6 +53,7 @@ class SRGAN():
 
         # Low res. images
         img_lr = Input(shape=self.lr_shape)
+        img_hr = Input(shape=self.hr_shape)
 
         # Generate high res. version from low res.
         fake_hr = self.generator(img_lr)
@@ -63,11 +64,11 @@ class SRGAN():
         # Discriminator determines validity of generated high res. images
         validity = self.discriminator(fake_hr)
 
-        self.combined = Model(img_lr, validity)
+        self.combined = Model(img_lr, [validity, fake_hr])
         if gpus != 1:
             self.combined = multi_gpu_model(self.combined, gpus=gpus)
-        self.combined.compile(loss=['binary_crossentropy'],
-                              loss_weights=[1],
+        self.combined.compile(loss=['binary_crossentropy', 'mse'],
+                              loss_weights=[1, 0.01],
                               optimizer=optimizer)
 
     def build_generator(self):
@@ -143,7 +144,7 @@ class SRGAN():
 
         return Model(d0, validity)
 
-    def train(self, trainset_path, iterations, batch_size=1, sample_interval=500):
+    def train(self, trainset_path, iterations, batch_size=1, sample_interval=500, num_g_per_d=3):
 
         for iteration in range(iterations):
             start_time = datetime.datetime.now()
@@ -152,6 +153,7 @@ class SRGAN():
             # ----------------------
             # Sample images and their conditioning counterparts
             imgs_hr, imgs_lr, imgs_info, imgs_shape, imgs_path = self.data_loader.load_data(trainset_path, batch_size)
+            print(imgs_path[0])
 
             # From low res. image generate high res. version
             fake_hr = self.generator.predict(imgs_lr)
@@ -175,20 +177,26 @@ class SRGAN():
             valid = np.ones((batch_size,) + self.disc_patch)
 
             # Train the generators
-            g_loss = self.combined.train_on_batch(imgs_lr, valid)
+            g_loss=[]
+            for i in range(num_g_per_d):
+                g_loss = self.combined.train_on_batch(imgs_lr, [valid, imgs_hr])
 
             elapsed_time = datetime.datetime.now() - start_time
             # Plot the progress
             clear_output()
-            print ("%d time:%s d_loss:%f d_acc:%f g_loss:%f" % (iteration, elapsed_time, d_loss[0], d_loss[1], g_loss))
+            print ("%d time:%s d_loss:%f d_acc:%f g_d_loss:%f g_mse_loss:%f" % (iteration, elapsed_time, d_loss[0], d_loss[1], g_loss[0], g_loss[1]))
 
             # If at save interval => save generated image samples
             if iteration % sample_interval == 0 and iteration != 0:
                 self.sample_images(trainset_path, iteration)
 
             # Show on notebook
-            fake_hr = self.data_loader.unnormalize(fake_hr, max_value=1024)
+            imgs_lr = self.data_loader.unnormalize(imgs_lr)
+            imgs_hr = self.data_loader.unnormalize(imgs_hr)
+            fake_hr = self.data_loader.unnormalize(fake_hr)
+            self.show_img(imgs_lr, notebook=True)
             self.show_img(fake_hr, notebook=True)
+            self.show_img(imgs_hr, notebook=True)
 
 
     def sample_images(self, dataset_path, iteration):
@@ -241,7 +249,7 @@ class SRGAN():
         return data_loader.show_slices([slice0, slice1, slice2], title)
 
     def free_memory(self):
-        self.resource_pool.clear()
+        self.data_loader.resource_pool.clear()
 
     def load_model(self):
         self.generator.load_weights("models/generator_weights.h5")
@@ -273,10 +281,11 @@ def get_low_res_file_with_affine(data, info, shape):
 def show_on_notebook(img0, img1, img2):
     from IPython.display import display
     from PIL import Image
-    offset = img2.shape[1] - img1.shape[1]
-    img0 = np.pad(img0, ((0,0), (20,20+offset)), 'constant', constant_values=1000)
-    img1 = np.pad(img1, ((0,0), (20,20+offset)), 'constant', constant_values=1000)
-    img2 = np.pad(img2, ((0,0), (20,20)), 'constant', constant_values=1000)
+    offset0 = img0.shape[0] - img1.shape[0]
+    offset1 = img2.shape[1] - img1.shape[1]
+    img0 = np.pad(img0, ((0,0), (20,20+offset1)), 'constant', constant_values=1000)
+    img1 = np.pad(img1, ((0,0+offset0), (20,20+offset1)), 'constant', constant_values=1000)
+    img2 = np.pad(img2, ((0,0+offset0), (20,20)), 'constant', constant_values=1000)
     img = np.concatenate((img0, img1, img2), axis=1)
     img = Image.fromarray(img)
     img = img.convert('RGB')

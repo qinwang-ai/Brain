@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 import nibabel as nib
 from scipy.ndimage import zoom
 min_voxel_value = 0
-max_voxel_value = 5653.5
+#max_voxel_value = 5653.5
+max_voxel_standard_value = 1024
 class DataLoader(object):
     def __init__(self, img_h_res, img_l_res):
         self.h_img_res = img_h_res
@@ -43,7 +44,7 @@ class DataLoader(object):
             if path not in self.resource_pool:
                 info, h_img = self.imread(path)
                 # prevent run out of memory
-                if (len(self.resource_pool) < 1000):
+                if (len(self.resource_pool) < 500):
                     self.resource_pool[path] = (info, np.copy(h_img))
             else:
                 info, h_img = self.resource_pool[path]
@@ -74,12 +75,13 @@ class DataLoader(object):
         return imgs_hr, imgs_lr, imgs_info, imgs_shape, imgs_path
 
     def normalize(self, img):
-        average = max_voxel_value/2.0
+        max_value = np.max(img)
+        average = max_value/2.0
         return np.array(img) / float(average) - 1.
 
     def unnormalize(self, img, max_value=None):
         if max_value is None:
-            max_value = max_voxel_value
+            max_value = max_voxel_standard_value
         average = max_value/2.0
         return (img + 1) * average
 
