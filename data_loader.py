@@ -14,18 +14,31 @@ class DataLoader(object):
         self.resource_pool = {}
 
     def get_res_low_from_origin(self, img_h):
-        res = []
+        lr = []
+        mask = []
+        lr_large = []
         data = np.copy(img_h)
         x_l = self.l_img_res[0]
         x_h = self.h_img_res[0]
-       	step = x_h//x_l
+        step = x_h//x_l
         start = 0
+        plane0 = data[0]
         for i in range(x_l):
             if start < data.shape[0]:
-                res.append(data[start])
+                lr.append(data[start])
+                lr_large.append(data[start])
+                mask.append(np.zeros_like(plane0))
             start += step
-        res = np.array(res)
-        return res
+            mask.append((step-1) * np.ones_like(plane0))
+            lr_large.append((step-1) * np.zeros_like(plane0))
+        if len(mask) > x_h:
+            mask = mask[:x_h]
+        if len(lr_large) > x_h:
+            lr_large = lr_large[:x_h]
+        lr = np.array(lr)
+        mask = np.array(mask)
+        lr_large = np.array(lr_large)
+        return lr, mask, lr_large
     # return zoom(data, (x/x_raw, y/y_raw, z/z_raw))
 
     def get_file_count(self, dataset_path):
@@ -37,6 +50,8 @@ class DataLoader(object):
         batch_images = np.random.choice(paths, size=batch_size)
         imgs_hr = []
         imgs_lr = []
+        imgs_mask = []
+        imgs_lr_large = []
         imgs_info = []
         imgs_path = []
         imgs_shape = []
@@ -56,15 +71,20 @@ class DataLoader(object):
             if is_testing:
                 h_img_stand = h_img
                 l_img_stand = h_img
+                # TODO test mask
+                mask = None
+                l_img_large = None
             else:
                 x_raw, y_raw, z_raw = h_img.shape
                 x, y, z,_ = self.h_img_res
                 h_img_stand = zoom(h_img, (x/x_raw, y/y_raw, z/z_raw))
-                l_img_stand = self.get_res_low_from_origin(h_img_stand)
+                l_img_stand, mask, l_img_large = self.get_res_low_from_origin(h_img_stand)
             h_img_stand = np.expand_dims(h_img_stand, axis=-1)
             l_img_stand = np.expand_dims(l_img_stand, axis=-1)
             imgs_hr.append(h_img_stand)
             imgs_lr.append(l_img_stand)
+            imgs_mask.append(mask)
+            imgs_lr_large.append(l_img_large)
             imgs_info.append(info)
             imgs_shape.append(h_img.shape)
             imgs_path.append(path)
@@ -72,7 +92,10 @@ class DataLoader(object):
         # normalize to 0~1
         imgs_hr = self.normalize(imgs_hr)
         imgs_lr = self.normalize(imgs_lr)
-        return imgs_hr, imgs_lr, imgs_info, imgs_shape, imgs_path
+        imgs_lr_large = self.normalize(imgs_lr_large)
+        # must delete this line , only for testing
+        imgs_mask = self.normalize(imgs_mask)
+        return imgs_hr, imgs_lr, imgs_mask, imgs_lr_large, imgs_info, imgs_shape, imgs_path
 
     def normalize(self, img):
         max_value = np.max(img)

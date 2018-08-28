@@ -53,10 +53,11 @@ class SRGAN():
 
         # Low res. images
         img_lr = Input(shape=self.lr_shape)
-        img_hr = Input(shape=self.hr_shape)
+        img_lr_mask = Input(shape=self.hr_shape)
+        img_lr_large = Input(shape=self.hr_shape)
 
         # Generate high res. version from low res.
-        fake_hr = self.generator(img_lr)
+        fake_hr = self.generator([img_lr, img_lr_mask, img_lr_large])
 
         # For the combined model we will only train the generator
         self.discriminator.trainable = False
@@ -64,7 +65,7 @@ class SRGAN():
         # Discriminator determines validity of generated high res. images
         validity = self.discriminator(fake_hr)
 
-        self.combined = Model(img_lr, [validity, fake_hr])
+        self.combined = Model([img_lr, img_lr_mask, img_lr_large], [validity, fake_hr])
         if gpus != 1:
             self.combined = multi_gpu_model(self.combined, gpus=gpus)
         self.combined.compile(loss=['binary_crossentropy', 'mse'],
@@ -92,6 +93,8 @@ class SRGAN():
 
         # Low resolution image input
         img_lr = Input(shape=self.lr_shape)
+        img_lr_large = Input(shape=self.hr_shape)
+        img_lr_mask = Input(shape=self.hr_shape)
 
         # Pre-residual block
         c1 = Conv3D(32, kernel_size=9, strides=1, padding='same')(img_lr)
@@ -113,8 +116,9 @@ class SRGAN():
 
         # Generate high resolution output
         gen_hr = Conv3D(self.channels, kernel_size=9, strides=1, padding='same', activation='tanh')(u2)
+        hr = gen_hr * img_lr_mask + img_lr_large
+        return Model([img_lr, img_lr_mask, img_lr_large], hr)
 
-        return Model(img_lr, gen_hr)
 
     def build_discriminator(self):
 
@@ -152,11 +156,15 @@ class SRGAN():
             #  Train Discriminator
             # ----------------------
             # Sample images and their conditioning counterparts
-            imgs_hr, imgs_lr, imgs_info, imgs_shape, imgs_path = self.data_loader.load_data(trainset_path, batch_size)
-            print(imgs_path[0])
+            imgs_hr, imgs_lr, imgs_mask, imgs_lr_large, imgs_info, imgs_shape, imgs_path = self.data_loader.load_data(trainset_path, batch_size)
+            imgs_lr_large = self.data_loader.unnormalize(imgs_lr_large)
+            imgs_mask = self.data_loader.unnormalize(imgs_mask)
+            self.show_img(imgs_lr_large, notebook=True)
+            self.show_img(imgs_mask, notebook=True)
+            return;
 
             # From low res. image generate high res. version
-            fake_hr = self.generator.predict(imgs_lr)
+            fake_hr = self.generator.predict([imgs_lr, imgs_mask, imgs_lr_large])
 
             valid = np.ones((batch_size,) + self.disc_patch)
             fake = np.zeros((batch_size,) + self.disc_patch)
@@ -171,7 +179,7 @@ class SRGAN():
             # ------------------
 
             # Sample images and their conditioning counterparts
-            imgs_hr, imgs_lr, imgs_info, imgs_shape, imgs_path = self.data_loader.load_data(trainset_path, batch_size)
+            imgs_hr, imgs_lr, imgs_mask, imgs_lr_large, imgs_info, imgs_shape, imgs_path = self.data_loader.load_data(trainset_path, batch_size)
 
             # The generators want the discriminators to label the generated images as real
             valid = np.ones((batch_size,) + self.disc_patch)
@@ -179,12 +187,13 @@ class SRGAN():
             # Train the generators
             g_loss=[]
             for i in range(num_g_per_d):
-                g_loss = self.combined.train_on_batch(imgs_lr, [valid, imgs_hr])
+                g_loss = self.combined.train_on_batch([imgs_lr, imgs_mask, imgs_lr_large], [valid, imgs_hr])
 
             elapsed_time = datetime.datetime.now() - start_time
             # Plot the progress
             clear_output()
-            print ("%d time:%s d_loss:%f d_acc:%f g_d_loss:%f g_mse_loss:%f" % (iteration, elapsed_time, d_loss[0], d_loss[1], g_loss[0], g_loss[1]))
+            print(imgs_path[0])
+            print("%d time:%s d_loss:%f d_acc:%f g_d_loss:%f g_mse_loss:%f" % (iteration, elapsed_time, d_loss[0], d_loss[1], g_loss[0], g_loss[1]))
 
             # If at save interval => save generated image samples
             if iteration % sample_interval == 0 and iteration != 0:
@@ -204,8 +213,8 @@ class SRGAN():
     def sample_images(self, dataset_path, iteration):
         os.makedirs('./sample_images', exist_ok=True)
 
-        imgs_hr, imgs_lr, imgs_info, imgs_shape, imgs_path = self.data_loader.load_data(dataset_path, batch_size=1, is_testing=False)
-        fakes_hr = self.generator.predict(imgs_lr)
+        imgs_hr, imgs_lr, imgs_mask, imgs_lr_large, imgs_info, imgs_shape, imgs_path = self.data_loader.load_data(dataset_path, batch_size=1, is_testing=False)
+        fakes_hr = self.generator.predict([imgs_lr, imgs_mask, imgs_lr_large])
 
         img_lr = imgs_lr[0]
         img_hr = imgs_hr[0]
@@ -259,7 +268,7 @@ class SRGAN():
         self.combined.load_weights("models/combined_weights.h5")
 
     def save_model(self):
-        print("saveing weight...")
+        print("save weight completed!")
         self.generator.save_weights("models/generator_weights.h5")
         self.discriminator.save_weights("models/discriminator_weights.h5")
         self.combined.save_weights("models/combined_weights.h5")
