@@ -144,7 +144,7 @@ class SRGAN():
 
         return Model(d0, validity)
 
-    def train(self, trainset_path, iterations, batch_size=1, sample_interval=500, num_g_per_d=3):
+    def train(self, trainset_path, iterations, batch_size=1, sample_interval=500, save_interval=200, num_g_per_d=3):
 
         for iteration in range(iterations):
             start_time = datetime.datetime.now()
@@ -189,6 +189,8 @@ class SRGAN():
             # If at save interval => save generated image samples
             if iteration % sample_interval == 0 and iteration != 0:
                 self.sample_images(trainset_path, iteration)
+            if iteration % save_interval == 0:
+                self.save_model()
 
             # Show on notebook
             imgs_lr = self.data_loader.unnormalize(imgs_lr)
@@ -254,10 +256,13 @@ class SRGAN():
     def load_model(self):
         self.generator.load_weights("models/generator_weights.h5")
         self.discriminator.load_weights("models/discriminator_weights.h5")
+        self.combined.load_weights("models/combined_weights.h5")
 
     def save_model(self):
+        print("saveing weight...")
         self.generator.save_weights("models/generator_weights.h5")
         self.discriminator.save_weights("models/discriminator_weights.h5")
+        self.combined.save_weights("models/combined_weights.h5")
 
 def get_name_by_path(path):
     filename = path.split('/')[-1]
