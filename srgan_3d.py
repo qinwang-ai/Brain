@@ -1,4 +1,5 @@
 import scipy
+import tensorflow as tf
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout, Concatenate
 from keras.layers import BatchNormalization, Activation, ZeroPadding2D, Add
 from keras.layers.advanced_activations import PReLU, LeakyReLU
@@ -6,6 +7,7 @@ from keras.layers.convolutional import UpSampling2D, Conv2D, Conv3D, UpSampling3
 from keras.models import Sequential, Model
 from keras.utils import multi_gpu_model
 from keras.optimizers import Adam
+from scipy.ndimage import zoom
 import datetime
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
@@ -13,9 +15,10 @@ import sys
 import data_loader
 from data_loader import DataLoader
 import numpy as np
+import math
 import os
 import nibabel as nib
-
+from keras.layers import Lambda
 import keras.backend as K
 
 class SRGAN():
@@ -34,7 +37,7 @@ class SRGAN():
         self.data_loader = DataLoader(img_h_res=self.hr_shape, img_l_res=self.lr_shape)
 
         # Calculate output shape of D (PatchGAN)
-        self.disc_patch = (hr[0] // 2**3, hr[1] // 2**3, hr[2] // 2**3, 1)
+        self.disc_patch = (math.ceil(hr[0] / 2.0**3), math.ceil(hr[1] / 2.0**3), math.ceil(hr[2] / 2.0**3), 1)
 
         # Number of filters in the first layer of D
         self.df = 16
@@ -97,26 +100,32 @@ class SRGAN():
         img_lr_mask = Input(shape=self.hr_shape)
 
         # Pre-residual block
-        c1 = Conv3D(32, kernel_size=9, strides=1, padding='same')(img_lr)
+        c1 = Conv3D(64, kernel_size=9, strides=1, padding='same')(img_lr)
         c1 = Activation('relu')(c1)
 
         # Propogate through residual blocks
-        r = residual_block(c1)
+        r = residual_block(c1, filters=64)
         for _ in range(self.n_residual_blocks - 1):
-            r = residual_block(r, filters=32)
+            r = residual_block(r, filters=64)
 
         # Post-residual block
-        c2 = Conv3D(32, kernel_size=3, strides=1, padding='same')(r)
+        c2 = Conv3D(64, kernel_size=3, strides=1, padding='same')(r)
         c2 = BatchNormalization(momentum=0.8)(c2)
         c2 = Add()([c2, c1])
 
         # Upsampling
-        u1 = deconv3d(c2, filters=32)
-        u2 = deconv3d(u1, filters=32)
+        u1 = deconv3d(c2, filters=64)
+        u2 = deconv3d(u1, filters=128)
 
         # Generate high resolution output
         gen_hr = Conv3D(self.channels, kernel_size=9, strides=1, padding='same', activation='tanh')(u2)
-        hr = gen_hr * img_lr_mask + img_lr_large
+
+        def mask(data):
+            gen_hr, img_lr_mask, img_lr_large = data
+            return tf.add(tf.multiply(gen_hr, img_lr_mask), img_lr_large)
+
+        hr = Lambda(mask)([gen_hr, img_lr_mask, img_lr_large])
+
         return Model([img_lr, img_lr_mask, img_lr_large], hr)
 
 
@@ -157,11 +166,12 @@ class SRGAN():
             # ----------------------
             # Sample images and their conditioning counterparts
             imgs_hr, imgs_lr, imgs_mask, imgs_lr_large, imgs_info, imgs_shape, imgs_path = self.data_loader.load_data(trainset_path, batch_size)
-            imgs_lr_large = self.data_loader.unnormalize(imgs_lr_large)
-            imgs_mask = self.data_loader.unnormalize(imgs_mask)
-            self.show_img(imgs_lr_large, notebook=True)
-            self.show_img(imgs_mask, notebook=True)
-            return;
+            # test show mask
+            #imgs_lr_large = self.data_loader.unnormalize(imgs_lr_large)
+            #imgs_mask = self.data_loader.unnormalize(imgs_mask)
+            #self.show_img(imgs_lr_large, notebook=True)
+            #self.show_img(imgs_mask, notebook=True)
+            #return;
 
             # From low res. image generate high res. version
             fake_hr = self.generator.predict([imgs_lr, imgs_mask, imgs_lr_large])
@@ -192,13 +202,13 @@ class SRGAN():
             elapsed_time = datetime.datetime.now() - start_time
             # Plot the progress
             clear_output()
-            print(imgs_path[0])
+            print(imgs_path[0]+'\n')
             print("%d time:%s d_loss:%f d_acc:%f g_d_loss:%f g_mse_loss:%f" % (iteration, elapsed_time, d_loss[0], d_loss[1], g_loss[0], g_loss[1]))
 
             # If at save interval => save generated image samples
             if iteration % sample_interval == 0 and iteration != 0:
                 self.sample_images(trainset_path, iteration)
-            if iteration % save_interval == 0:
+            if iteration % save_interval == 0 and iteration != 0:
                 self.save_model()
 
             # Show on notebook

@@ -29,8 +29,9 @@ class DataLoader(object):
                 lr_large.append(data[start])
                 mask.append(np.zeros_like(plane0))
             start += step
-            mask.append((step-1) * np.ones_like(plane0))
-            lr_large.append((step-1) * np.zeros_like(plane0))
+            for j in range(step - 1):
+                mask.append(np.ones_like(plane0))
+                lr_large.append(np.zeros_like(plane0))
         if len(mask) > x_h:
             mask = mask[:x_h]
         if len(lr_large) > x_h:
@@ -39,7 +40,6 @@ class DataLoader(object):
         mask = np.array(mask)
         lr_large = np.array(lr_large)
         return lr, mask, lr_large
-    # return zoom(data, (x/x_raw, y/y_raw, z/z_raw))
 
     def get_file_count(self, dataset_path):
         paths = glob(dataset_path, recursive=True)
@@ -67,8 +67,7 @@ class DataLoader(object):
 
             if is_testing:
                 h_img = test_preprocessing(h_img)
-
-            if is_testing:
+                h_img = self.normalize(h_img)
                 h_img_stand = h_img
                 l_img_stand = h_img
                 # TODO test mask
@@ -78,9 +77,13 @@ class DataLoader(object):
                 x_raw, y_raw, z_raw = h_img.shape
                 x, y, z,_ = self.h_img_res
                 h_img_stand = zoom(h_img, (x/x_raw, y/y_raw, z/z_raw))
+                h_img_stand = self.normalize(h_img_stand)
                 l_img_stand, mask, l_img_large = self.get_res_low_from_origin(h_img_stand)
             h_img_stand = np.expand_dims(h_img_stand, axis=-1)
             l_img_stand = np.expand_dims(l_img_stand, axis=-1)
+            mask = np.expand_dims(mask, axis=-1)
+            l_img_large = np.expand_dims(l_img_large, axis=-1)
+
             imgs_hr.append(h_img_stand)
             imgs_lr.append(l_img_stand)
             imgs_mask.append(mask)
@@ -89,12 +92,11 @@ class DataLoader(object):
             imgs_shape.append(h_img.shape)
             imgs_path.append(path)
 
-        # normalize to 0~1
-        imgs_hr = self.normalize(imgs_hr)
-        imgs_lr = self.normalize(imgs_lr)
-        imgs_lr_large = self.normalize(imgs_lr_large)
-        # must delete this line , only for testing
-        imgs_mask = self.normalize(imgs_mask)
+            imgs_hr = np.array(imgs_hr)
+            imgs_lr = np.array(imgs_lr)
+            imgs_mask = np.array(imgs_mask)
+            imgs_lr_large = np.array(imgs_lr_large)
+
         return imgs_hr, imgs_lr, imgs_mask, imgs_lr_large, imgs_info, imgs_shape, imgs_path
 
     def normalize(self, img):
