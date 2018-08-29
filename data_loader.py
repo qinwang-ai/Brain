@@ -92,10 +92,10 @@ class DataLoader(object):
             imgs_shape.append(h_img.shape)
             imgs_path.append(path)
 
-            imgs_hr = np.array(imgs_hr)
-            imgs_lr = np.array(imgs_lr)
-            imgs_mask = np.array(imgs_mask)
-            imgs_lr_large = np.array(imgs_lr_large)
+        imgs_hr = np.array(imgs_hr)
+        imgs_lr = np.array(imgs_lr)
+        imgs_mask = np.array(imgs_mask)
+        imgs_lr_large = np.array(imgs_lr_large)
 
         return imgs_hr, imgs_lr, imgs_mask, imgs_lr_large, imgs_info, imgs_shape, imgs_path
 

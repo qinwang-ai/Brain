@@ -115,16 +115,16 @@ class SRGAN():
 
         # Upsampling
         u1 = deconv3d(c2, filters=64)
-        u2 = deconv3d(u1, filters=128)
+        u2 = deconv3d(u1, filters=64)
 
         # Generate high resolution output
         gen_hr = Conv3D(self.channels, kernel_size=9, strides=1, padding='same', activation='tanh')(u2)
 
-        def mask(data):
-            gen_hr, img_lr_mask, img_lr_large = data
-            return tf.add(tf.multiply(gen_hr, img_lr_mask), img_lr_large)
+        #def mask(data):
+         #   gen_hr, img_lr_mask, img_lr_large = data
+          #  return tf.add(tf.multiply(gen_hr, img_lr_mask), img_lr_large)
 
-        hr = Lambda(mask)([gen_hr, img_lr_mask, img_lr_large])
+        hr = Add()([gen_hr, img_lr_large])
 
         return Model([img_lr, img_lr_mask, img_lr_large], hr)
 
@@ -197,6 +197,7 @@ class SRGAN():
             # Train the generators
             g_loss=[]
             for i in range(num_g_per_d):
+                print("training G net:", i)
                 g_loss = self.combined.train_on_batch([imgs_lr, imgs_mask, imgs_lr_large], [valid, imgs_hr])
 
             elapsed_time = datetime.datetime.now() - start_time
@@ -206,9 +207,9 @@ class SRGAN():
             print("%d time:%s d_loss:%f d_acc:%f g_d_loss:%f g_mse_loss:%f" % (iteration, elapsed_time, d_loss[0], d_loss[1], g_loss[0], g_loss[1]))
 
             # If at save interval => save generated image samples
-            if iteration % sample_interval == 0 and iteration != 0:
+            if (iteration*num_g_per_d) % sample_interval == 0 and iteration != 0:
                 self.sample_images(trainset_path, iteration)
-            if iteration % save_interval == 0 and iteration != 0:
+            if (iteration*num_g_per_d) % save_interval == 0 and iteration != 0:
                 self.save_model()
 
             # Show on notebook
