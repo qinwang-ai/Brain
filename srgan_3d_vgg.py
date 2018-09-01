@@ -71,6 +71,7 @@ class SRGAN():
         img_lr = Input(shape=self.lr_shape)
         img_lr_mask = Input(shape=self.hr_shape)
         img_lr_large = Input(shape=self.hr_shape)
+        img_vgg = Input(shape=(self.hr_shape[0], self.hr_shape[2], 1))
 
         # Generate high res. version from low res.
         fake_hr = self.generator(img_lr)
@@ -79,15 +80,17 @@ class SRGAN():
         self.discriminator.trainable = False
 
         fake_hr = Lambda(self.mask)([fake_hr, img_lr_mask, img_lr_large])
-        fake_hr[:,self.hr_shape[1],:] = self.vgg(fake_hr[:,self.hr_shape[1],:])
+        def take_slice(data):
+            return data[:,self.hr_shape[1]//2,:]
+        img_vgg = self.vgg(Lambda(take_slice)(fake_hr))
         # Discriminator determines validity of generated high res. images
         validity = self.discriminator(fake_hr)
 
-        self.combined = Model([img_lr, img_lr_mask, img_lr_large], [validity, fake_hr])
+        self.combined = Model([img_lr, img_lr_mask, img_lr_large], [validity, fake_hr, img_vgg])
         if gpus != 1:
             self.combined = multi_gpu_model(self.combined, gpus=gpus)
-        self.combined.compile(loss=['mse', 'mse'],
-                              loss_weights=[1, 1],
+        self.combined.compile(loss=['mse', 'mse', 'mse'],
+                              loss_weights=[1, 1, 1],
                               optimizer=optimizer_g)
     def build_vgg(self):
         """
@@ -99,14 +102,14 @@ class SRGAN():
         # See architecture at: https://github.com/keras-team/keras/blob/master/keras/applications/vgg19.py
         vgg.outputs = [vgg.layers[9].output]
 
-        img = Input(shape=(self.hr_shape[0], self.hr_shape[2], 1))
-        img = BatchNormalization()(img)
+        img_input = Input(shape=(self.hr_shape[0], self.hr_shape[2], 1))
+        img = BatchNormalization()(img_input)
         img = Conv2D(3, kernel_size=(1, 1), padding='same', activation='relu')(img)
 
         # Extract image features
         img_features = vgg(img)
 
-        return Model(img, img_features)
+        return Model(img_input, img_features)
 
     def build_generator(self):
 
@@ -217,8 +220,8 @@ class SRGAN():
             g_loss=[]
             for i in range(num_g_per_d):
                 imgs_hr, imgs_lr, imgs_mask, imgs_large, imgs_info, imgs_shape, imgs_path = self.data_loader.load_data(trainset_path, batch_size, with_mask=True)
-                imgs_hr = self.vgg.predict(imgs_hr[:,self.hr_shape[1],:])
-                g_loss = self.combined.train_on_batch([imgs_lr, imgs_mask, imgs_large], [valid, imgs_hr])
+                imgs_vgg = self.vgg.predict(np.array([imgs_hr[0, :,self.hr_shape[1]//2,:]]))
+                g_loss = self.combined.train_on_batch([imgs_lr, imgs_mask, imgs_large], [valid, imgs_hr, imgs_vgg])
                 print("training G net:", i, " g_loss:", g_loss)
 
             # ------------------
