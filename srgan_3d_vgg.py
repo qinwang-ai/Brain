@@ -100,6 +100,8 @@ class SRGAN():
         vgg.outputs = [vgg.layers[9].output]
 
         img = Input(shape=(self.hr_shape[0], self.hr_shape[2], 1))
+        img = BatchNormalization()(img)
+        img = Conv2D(3, kernel_size=(1, 1), padding='same', activation='relu')(img)
 
         # Extract image features
         img_features = vgg(img)
