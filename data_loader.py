@@ -12,8 +12,9 @@ class DataLoader(object):
         self.h_img_res = img_h_res
         self.l_img_res = img_l_res
         self.resource_pool = {}
+        self.loop_i = 1
 
-    def get_res_low_from_origin(self, img_h):
+    def get_res_low_from_origin(self, img_h, with_mask=False):
         lr = []
         mask = []
         lr_large = []
@@ -26,26 +27,30 @@ class DataLoader(object):
         for i in range(x_l):
             if start < data.shape[0]:
                 lr.append(data[start])
-                lr_large.append(data[start])
-                mask.append(np.zeros_like(plane0))
+                if with_mask:
+                    lr_large.append(data[start])
+                    mask.append(np.zeros_like(plane0))
             start += step
             for j in range(step - 1):
-                mask.append(np.ones_like(plane0))
-                lr_large.append(np.zeros_like(plane0))
-        if len(mask) > x_h:
-            mask = mask[:x_h]
-        if len(lr_large) > x_h:
-            lr_large = lr_large[:x_h]
+                if with_mask:
+                    mask.append(np.ones_like(plane0))
+                    lr_large.append(np.zeros_like(plane0))
         lr = np.array(lr)
-        mask = np.array(mask)
-        lr_large = np.array(lr_large)
-        return lr, mask, lr_large
+        if with_mask:
+            if len(mask) > x_h:
+                mask = mask[:x_h]
+            if len(lr_large) > x_h:
+                lr_large = lr_large[:x_h]
+            mask = np.array(mask)
+            lr_large = np.array(lr_large)
+            return lr, mask, lr_large
+        return lr
 
     def get_file_count(self, dataset_path):
         paths = glob(dataset_path, recursive=True)
         return len(paths)
 
-    def load_data(self, dataset_path, batch_size=1, is_testing=False):
+    def load_data(self, dataset_path, batch_size=1, is_testing=False, with_mask=False):
         paths = glob(dataset_path, recursive=True)
         batch_images = np.random.choice(paths, size=batch_size)
         imgs_hr = []
@@ -78,26 +83,44 @@ class DataLoader(object):
                 x, y, z,_ = self.h_img_res
                 h_img_stand = zoom(h_img, (x/x_raw, y/y_raw, z/z_raw))
                 h_img_stand = self.normalize(h_img_stand)
-                l_img_stand, mask, l_img_large = self.get_res_low_from_origin(h_img_stand)
+                if with_mask:
+                    l_img_stand, mask, l_img_large = self.get_res_low_from_origin(h_img_stand, with_mask)
+                else:
+                    l_img_stand = self.get_res_low_from_origin(h_img_stand, with_mask)
+            '''
+                i = self.loop_i
+                t = mask[:i]
+                mask = mask[i:]
+                mask = np.append(mask, t, axis=0)
+
+                t = l_img_large[:i]
+                l_img_large = l_img_large[i:]
+                l_img_large = np.append(l_img_large, t, axis=0)
+
+                self.loop_i += 1
+                if self.loop_i > x:
+                    self.loop_i = 1
+            '''
             h_img_stand = np.expand_dims(h_img_stand, axis=-1)
             l_img_stand = np.expand_dims(l_img_stand, axis=-1)
-            mask = np.expand_dims(mask, axis=-1)
-            l_img_large = np.expand_dims(l_img_large, axis=-1)
-
+            if with_mask:
+                mask = np.expand_dims(mask, axis=-1)
+                l_img_large = np.expand_dims(l_img_large, axis=-1)
+                imgs_mask.append(mask)
+                imgs_lr_large.append(l_img_large)
             imgs_hr.append(h_img_stand)
             imgs_lr.append(l_img_stand)
-            imgs_mask.append(mask)
-            imgs_lr_large.append(l_img_large)
             imgs_info.append(info)
             imgs_shape.append(h_img.shape)
             imgs_path.append(path)
 
         imgs_hr = np.array(imgs_hr)
         imgs_lr = np.array(imgs_lr)
-        imgs_mask = np.array(imgs_mask)
-        imgs_lr_large = np.array(imgs_lr_large)
-
-        return imgs_hr, imgs_lr, imgs_mask, imgs_lr_large, imgs_info, imgs_shape, imgs_path
+        if with_mask:
+            imgs_mask = np.array(imgs_mask)
+            imgs_lr_large = np.array(imgs_lr_large)
+            return imgs_hr, imgs_lr, imgs_mask, imgs_lr_large, imgs_info, imgs_shape, imgs_path
+        return imgs_hr, imgs_lr, imgs_info, imgs_shape, imgs_path
 
     def normalize(self, img):
         max_value = np.max(img)
