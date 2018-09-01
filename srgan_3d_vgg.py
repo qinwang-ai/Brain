@@ -99,7 +99,7 @@ class SRGAN():
         # See architecture at: https://github.com/keras-team/keras/blob/master/keras/applications/vgg19.py
         vgg.outputs = [vgg.layers[9].output]
 
-        img = Input(shape=self.hr_shape)
+        img = Input(shape=(self.hr_shape[0], self.hr_shape[2], 1))
 
         # Extract image features
         img_features = vgg(img)
