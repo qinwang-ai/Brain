@@ -32,8 +32,8 @@ class SRGAN():
         # Number of residual blocks in the generator
         self.n_residual_blocks = n_residual_blocks
 
-        optimizer_d = RMSprop(0.00001)
-        optimizer_g = RMSprop(0.0001)
+        optimizer_d = RMSprop(0.0001)
+        optimizer_g = RMSprop(0.00001)
 
         self.vgg = self.build_vgg()
         self.vgg.trainable = False
@@ -90,7 +90,7 @@ class SRGAN():
         if gpus != 1:
             self.combined = multi_gpu_model(self.combined, gpus=gpus)
         self.combined.compile(loss=['mse', 'mse', 'mse'],
-                              loss_weights=[1, 1, 1],
+                              loss_weights=[100, 1, 100],
                               optimizer=optimizer_g)
     def build_vgg(self):
         """
