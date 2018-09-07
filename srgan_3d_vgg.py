@@ -6,7 +6,7 @@ from keras.layers.advanced_activations import PReLU, LeakyReLU
 from keras.layers.convolutional import UpSampling2D, Conv2D, Conv3D, UpSampling3D
 from keras.models import Sequential, Model
 from keras.utils import multi_gpu_model
-from keras.optimizers import RMSprop
+from keras.optimizers import RMSprop, Adam
 from scipy.ndimage import zoom
 import datetime
 from IPython.display import clear_output
@@ -23,29 +23,32 @@ from keras.layers import Lambda
 import keras.backend as K
 
 class SRGAN():
-    def __init__(self, lr, hr, n_residual_blocks=8, gpus=1):
+    def __init__(self, lr, hr, n_residual_blocks=8, gpus=1, vgg19=None, loss_weights=[1, 2500, 2500, 2500, 2500, 25]):
         # Input shape
         self.lr_shape = lr
         self.hr_shape = hr
         self.channels = 1
+        self.vgg19 = vgg19
+        self.loss_weights = loss_weights
 
         # Number of residual blocks in the generator
         self.n_residual_blocks = n_residual_blocks
 
-        optimizer_d = RMSprop(0.0001)
+        optimizer_d = RMSprop(0.00001)
         optimizer_g = RMSprop(0.00001)
+        optimizer_vgg = Adam(0.0001)
 
         self.vgg = self.build_vgg()
         self.vgg.trainable = False
-        self.vgg.compile(loss='mse',
-            optimizer=optimizer_g,
+        self.vgg.compile(loss='categorical_crossentropy',
+            optimizer=optimizer_vgg,
             metrics=['accuracy'])
 
         # Configure data loader
         self.data_loader = DataLoader(img_h_res=self.hr_shape, img_l_res=self.lr_shape)
 
         # Calculate output shape of D (PatchGAN)
-        self.disc_patch = (math.ceil(hr[0] / 2.0**3), math.ceil(hr[1] / 2.0**3), math.ceil(hr[2] / 2.0**3), 1)
+        self.disc_patch = (math.ceil(hr[0] / 2.0**2), math.ceil(hr[1] / 2.0**2), math.ceil(hr[2] / 2.0**2), 1)
 
         # Number of filters in the first layer of D
         self.df = 16
@@ -66,12 +69,12 @@ class SRGAN():
 
         # Build the generator
         self.generator = self.build_generator()
+        i,j,k,l = self.hr_shape
 
         # Low res. images
         img_lr = Input(shape=self.lr_shape)
         img_lr_mask = Input(shape=self.hr_shape)
         img_lr_large = Input(shape=self.hr_shape)
-        img_vgg = Input(shape=(self.hr_shape[0], self.hr_shape[2], 1))
 
         # Generate high res. version from low res.
         fake_hr = self.generator(img_lr)
@@ -80,34 +83,50 @@ class SRGAN():
         self.discriminator.trainable = False
 
         fake_hr = Lambda(self.mask)([fake_hr, img_lr_mask, img_lr_large])
-        def take_slice(data):
-            return data[:,self.hr_shape[1]//2,:]
-        img_vgg = self.vgg(Lambda(take_slice)(fake_hr))
+
+
+        def take_slice0(data):
+            return data[:,0:i//2 ,:, 0:k//2, :]
+        self.take_slice0 = take_slice0
+        def take_slice1(data):
+            return data[:,i//2: ,:, 0:k//2, :]
+        self.take_slice1 = take_slice1
+        def take_slice2(data):
+            return data[:,0:i//2 ,:, k//2:, :]
+        self.take_slice2 = take_slice2
+        def take_slice3(data):
+            return data[:,i//2: ,:, k//2:, :]
+        self.take_slice3 = take_slice3
+
+        img_vgg0 = self.vgg(Lambda(take_slice0)(fake_hr))
+        img_vgg1 = self.vgg(Lambda(take_slice1)(fake_hr))
+        img_vgg2 = self.vgg(Lambda(take_slice2)(fake_hr))
+        img_vgg3 = self.vgg(Lambda(take_slice3)(fake_hr))
         # Discriminator determines validity of generated high res. images
         validity = self.discriminator(fake_hr)
 
-        self.combined = Model([img_lr, img_lr_mask, img_lr_large], [validity, fake_hr, img_vgg])
+        self.combined = Model([img_lr, img_lr_mask, img_lr_large], [validity,
+            img_vgg0, img_vgg1, img_vgg2, img_vgg3, fake_hr])
         if gpus != 1:
             self.combined = multi_gpu_model(self.combined, gpus=gpus)
-        self.combined.compile(loss=['mse', 'mse', 'mse'],
-                              loss_weights=[100, 1, 100],
+        self.combined.compile(loss=['mse', 'mae', 'mae', 'mae','mae', 'mse'],
+                              loss_weights=loss_weights,
                               optimizer=optimizer_g)
     def build_vgg(self):
         """
         Builds a pre-trained VGG19 model that outputs image features extracted at the
         third block of the model
         """
-        vgg = VGG19(weights="imagenet")
+        vgg = self.vgg19
         # Set outputs to outputs of last conv. layer in block 3
         # See architecture at: https://github.com/keras-team/keras/blob/master/keras/applications/vgg19.py
         vgg.outputs = [vgg.layers[9].output]
 
-        img_input = Input(shape=(self.hr_shape[0], self.hr_shape[2], 1))
-        img = BatchNormalization()(img_input)
-        img = Conv2D(3, kernel_size=(1, 1), padding='same', activation='relu')(img)
+        i,j,k,l = self.hr_shape
+        img_input = Input(shape=(i//2, j, k//2, l))
 
         # Extract image features
-        img_features = vgg(img)
+        img_features = vgg(img_input)
 
         return Model(img_input, img_features)
 
@@ -177,7 +196,7 @@ class SRGAN():
         d3 = d_block(d2, self.df*2)
         d4 = d_block(d3, self.df*2, strides=2)
         d5 = d_block(d4, self.df*4)
-        d6 = d_block(d5, self.df*4, strides=2)
+        d6 = d_block(d5, self.df*4, strides=1)
         d7 = d_block(d6, self.df*8)
         d8 = d_block(d7, self.df*8, strides=1)
 
@@ -220,9 +239,19 @@ class SRGAN():
             g_loss=[]
             for i in range(num_g_per_d):
                 imgs_hr, imgs_lr, imgs_mask, imgs_large, imgs_info, imgs_shape, imgs_path = self.data_loader.load_data(trainset_path, batch_size, with_mask=True)
-                imgs_vgg = self.vgg.predict(np.array([imgs_hr[0, :,self.hr_shape[1]//2,:]]))
-                g_loss = self.combined.train_on_batch([imgs_lr, imgs_mask, imgs_large], [valid, imgs_hr, imgs_vgg])
-                print("training G net:", i, " g_loss:", g_loss)
+
+                img_slice0 = self.take_slice0(imgs_hr)
+                img_slice1 = self.take_slice1(imgs_hr)
+                img_slice2 = self.take_slice2(imgs_hr)
+                img_slice3 = self.take_slice3(imgs_hr)
+                imgs_vgg0 = self.vgg.predict(img_slice0)
+                imgs_vgg1 = self.vgg.predict(img_slice1)
+                imgs_vgg2 = self.vgg.predict(img_slice2)
+                imgs_vgg3 = self.vgg.predict(img_slice3)
+
+                g_loss = self.combined.train_on_batch([imgs_lr, imgs_mask, imgs_large], [valid,
+                    imgs_vgg0, imgs_vgg1, imgs_vgg2, imgs_vgg3, imgs_hr])
+                print(self.combined.metrics_names, "\ng_loss:", g_loss[0], g_loss[1:] * np.array(self.loss_weights))
 
             # ------------------
             #  Display
@@ -232,7 +261,8 @@ class SRGAN():
             # Plot the progress
             clear_output()
             print(imgs_path_d[0]+'\n')
-            print("%d time:%s d_loss:%f d_acc:%f g_d_loss:%f g_mse_loss:%f" % (iteration, elapsed_time, d_loss[0], d_loss[1], g_loss[0], g_loss[1]))
+            print('combined_metrics:', self.combined.metrics_names)
+            print("%d time:%s d_loss:%f d_acc:%f g_loss:%f g_d_loss:%f" % (iteration, elapsed_time, d_loss[0], d_loss[1], g_loss[0], g_loss[1]))
 
             # If at save interval => save generated image samples
             if (iteration*num_g_per_d) % sample_interval == 0 and iteration != 0:
@@ -241,11 +271,9 @@ class SRGAN():
                 self.save_model()
 
             # Show on notebook from D net
-            # preidct + mask_data
-            fake_hr_d = fake_hr_d*imgs_mask_d + imgs_large_d
             imgs_lr_d = self.data_loader.unnormalize(imgs_lr_d)
             imgs_hr_d = self.data_loader.unnormalize(imgs_hr_d)
-            fake_hr_d = self.data_loader.unnormalize(fake_hr_d)
+            fake_hr_d = self.data_loader.unnormalize(fake_hr_d * imgs_mask_d + imgs_large_d)
 
             # zoom lr time complexity high
             #x,y,z,_ = imgs_hr_d[0].shape
